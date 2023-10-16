@@ -1,9 +1,14 @@
 import {
+  ILayoutRestorer,
   JupyterFrontEnd,
   JupyterFrontEndPlugin,
 } from '@jupyterlab/application';
 
-import { ICommandPalette, MainAreaWidget } from '@jupyterlab/apputils';
+import { 
+  ICommandPalette, 
+  MainAreaWidget,
+  WidgetTracker,
+} from '@jupyterlab/apputils';
 
 import { Widget } from '@lumino/widgets';
 
@@ -16,76 +21,134 @@ interface APODResponse {
   url: string;
 };
 
+class APODWidget extends Widget {
+  /**
+  * Construct a new APOD widget.
+  */
+  constructor() {
+    super();
+
+    this.addClass('my-apodWidget');
+
+    // Add an image element to the panel
+    this.img = document.createElement('img');
+    this.node.appendChild(this.img);
+
+    // Add a summary element to the panel
+    this.summary = document.createElement('p');
+    this.node.appendChild(this.summary);
+  }
+
+  /**
+  * The image element associated with the widget.
+  */
+  readonly img: HTMLImageElement;
+
+  /**
+  * The summary text element associated with the widget.
+  */
+  readonly summary: HTMLParagraphElement;
+
+  /**
+  * Handle update requests for the widget.
+  */
+  async updateAPODImage(): Promise<void> {
+
+    const response = await fetch(`https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&date=${this.randomDate()}`);
+
+    if (!response.ok) {
+      const data = await response.json();
+      if (data.error) {
+        this.summary.innerText = data.error.message;
+      } else {
+        this.summary.innerText = response.statusText;
+      }
+      return;
+    }
+
+    const data = await response.json() as APODResponse;
+
+    if (data.media_type === 'image') {
+      // Populate the image
+      this.img.src = data.url;
+      this.img.title = data.title;
+      this.summary.innerText = data.title;
+      if (data.copyright) {
+        this.summary.innerText += ` (Copyright ${data.copyright})`;
+      }
+    } else {
+      this.summary.innerText = 'Random APOD fetched was not an image.';
+    }
+  }
+
+  /**
+  * Get a random date string in YYYY-MM-DD format.
+  */
+  randomDate(): string {
+    const start = new Date(2010, 1, 1);
+    const end = new Date();
+    const randomDate = new Date(start.getTime() + Math.random()*(end.getTime() - start.getTime()));
+    return randomDate.toISOString().slice(0, 10);
+  }
+}
+
 /**
- * Initialization data for the test_script extension.
- */
+* Activate the APOD widget extension.
+*/
+function activate(app: JupyterFrontEnd, palette: ICommandPalette, restorer: ILayoutRestorer | null) {
+  console.log('JupyterLab extension jupyterlab_apod is activated!');
+
+  // Declare a widget variable
+  let widget: MainAreaWidget<APODWidget>;
+
+  // Add an application command
+  const command: string = 'apod:open';
+  app.commands.addCommand(command, {
+    label: 'Random Astronomy Picture',
+    execute: () => {
+      if (!widget || widget.isDisposed) {
+        const content = new APODWidget();
+        widget = new MainAreaWidget({content});
+        widget.id = 'apod-jupyterlab';
+        widget.title.label = 'Astronomy Picture';
+        widget.title.closable = true;
+      }
+      if (!tracker.has(widget)) {
+        // Track the state of the widget for later restoration
+        tracker.add(widget);
+      }
+      if (!widget.isAttached) {
+        // Attach the widget to the main work area if it's not there
+        app.shell.add(widget, 'main');
+      }
+      widget.content.updateAPODImage();
+
+      // Activate the widget
+      app.shell.activateById(widget.id);
+    }
+  });
+
+  // Add the command to the palette.
+  palette.addItem({ command, category: 'Tutorial' });
+
+  // Track and restore the widget state
+  let tracker = new WidgetTracker<MainAreaWidget<APODWidget>>({
+    namespace: 'apod'
+  });
+  if (restorer) {
+    restorer.restore(tracker, {
+      command,
+      name: () => 'apod'
+    });
+  }
+}
+
 const plugin: JupyterFrontEndPlugin<void> = {
-  id: 'test_script',
-  description: 'A JupyterLab extension exam',
+  id: 'jupyterlab_apod',
   autoStart: true,
   requires: [ICommandPalette],
-  activate: async (app: JupyterFrontEnd, palette: ICommandPalette) => {
-    console.log('JupyterLab extension jupyterlab_apod is activated!');
-
-    // Define a widget creator function,
-    // then call it to make a new widget
-    const newWidget = async () => {
-      // Create a blank content widget inside of a MainAreaWidget
-      const content = new Widget();
-      const widget = new MainAreaWidget({ content });
-      widget.id = 'apod-jupyterlab';
-      widget.title.label = 'Astronomy Picture';
-      widget.title.closable = true;
-
-      // Add an image element to the content
-      let img = document.createElement('img');
-      content.node.appendChild(img);
-
-      // Get a random date string in YYYY-MM-DD format
-      function randomDate() {
-        const start = new Date(2010, 1, 1);
-        const end = new Date();
-        const randomDate = new Date(start.getTime() + Math.random()*(end.getTime() - start.getTime()));
-        return randomDate.toISOString().slice(0, 10);
-      }
-
-      // Fetch info about a random picture
-      const response = await fetch(`https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&date=${randomDate()}`);
-      const data = await response.json() as APODResponse;
-
-      if (data.media_type === 'image') {
-        // Populate the image
-        img.src = data.url;
-        img.title = data.title;
-      } else {
-        console.log('Random APOD was not a picture.');
-      }
-
-      return widget;
-    }
-    let widget = await newWidget();
-
-    // Add an application command
-    const command: string = 'apod:open';
-    app.commands.addCommand(command, {
-      label: 'Random Astronomy Picture',
-      execute: async () => {
-        // Regenerate the widget if disposed
-        if (widget.isDisposed) {
-          widget = await newWidget();
-        }
-        if (!widget.isAttached) {
-          // Attach the widget to the main work area if it's not there
-          app.shell.add(widget, 'main');
-        }
-        // Activate the widget
-        app.shell.activateById(widget.id);
-      }
-    });
-
-    // Add the command to the palette.
-    palette.addItem({ command, category: 'Tutorial' });
-  }
+  optional: [ILayoutRestorer],
+  activate: activate
 };
 
 export default plugin;
