@@ -1,0 +1,19 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: v4.2.2
+_src_path: https://github.com/jupyterlab/extension-template
+author_email: no7kai@gmail.com
+author_name: no7kai
+data_format: string
+file_extension: ''
+has_binder: false
+has_settings: false
+kind: frontend
+labextension_name: test_script
+mimetype: ''
+mimetype_name: ''
+project_short_description: A JupyterLab extension exam
+python_name: test_script
+repository: https://github.com/no7kai/jupyterlab_test_ext
+test: true
+viewer_name: ''
+
